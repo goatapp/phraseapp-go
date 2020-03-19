@@ -427,3 +427,57 @@ func (client *Client) KeyUpdateWithContext(ctx context.Context, project_id, id s
 	}()
 	return retVal, err
 }
+
+func (client *Client) sendGetRequestPaginatedWithContext(ctx context.Context, urlPath string, params map[string]string, expectedStatus, page, perPage int) (io.ReadCloser, error) {
+	endpointURL, err := url.Parse(client.Credentials.Host + urlPath)
+	if err != nil {
+		return nil, err
+	}
+
+	addPagination(endpointURL, page, perPage)
+
+	req, err := client.buildRequestWithContext(ctx, "GET", endpointURL, nil, "")
+	if err != nil {
+		return nil, err
+	}
+
+	values := req.URL.Query()
+	for key, value := range params {
+		values.Add(key, value)
+	}
+
+	req.URL.RawQuery = values.Encode()
+	resp, err := client.send(req, expectedStatus)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Body, nil
+}
+
+// List translations for a specific locale. If you want to download all translations for one locale we recommend to use the <code>locales#download</code> endpoint.
+func (client *Client) TranslationsByLocaleWithContext(ctx context.Context, project_id, locale_id string, page, perPage int, params *TranslationsByLocaleParams) ([]*Translation, error) {
+	retVal := []*Translation{}
+	err := func() error {
+
+		url := fmt.Sprintf("/v2/projects/%s/locales/%s/translations", url.QueryEscape(project_id), url.QueryEscape(locale_id))
+
+		rc, err := client.sendGetRequestPaginatedWithContext(ctx, url, params.QueryParams(), 200, page, perPage)
+
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+
+		var reader io.Reader
+		if client.debug {
+			reader = io.TeeReader(rc, os.Stderr)
+		} else {
+			reader = rc
+		}
+
+		return json.NewDecoder(reader).Decode(&retVal)
+
+	}()
+	return retVal, err
+}
